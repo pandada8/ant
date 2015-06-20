@@ -2,7 +2,7 @@
 
 > This is just a toy
 
-created with `asyncio` and `aiohttp`. 
+created with `asyncio`, `aiohttp` and `pyquery`. 
 
 ## Example
 
