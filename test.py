@@ -9,7 +9,7 @@ class WrongCallError(Exception):
 
 
 class End_Of_Life():
-    
+
     def __repr__(self):
         return "[We died]"
 
@@ -67,17 +67,14 @@ class Job(object):
                 print('recv', to_do)
                 if to_do is not EOL:
                     result = yield from func(to_do, **kwargs)
-                    print('result of ', func.__name__, result)
                     if not iterable(result):
                         result = [result]
                     for i in result:
-                        print(i)
                         yield from queue.put(i)
-                    # yield from queue.put(EOL)
-                    # print('Goodbye')
                     # prev_queue.task_done()
                 else:
                     yield from queue.put(EOL)
+                    print("Goodbye", func.__name__)
                     return
 
         self.prev_queue = queue
@@ -95,10 +92,7 @@ class Job(object):
         tasks = []
         for i in self.funcs:
             tasks.append(self.loop.create_task(i()))
-        self.loop.run_forever()
-        # self.loop.run_until_complete(self.until_finish())
-        # self.loop.run_until_complete(asyncio.wait([asyncio.async(i) for i in tasks]))
-
+        self.loop.run_until_complete(self.until_finish())
         self.loop.close()
 
 
