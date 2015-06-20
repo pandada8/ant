@@ -36,9 +36,15 @@ class Job(object):
             queue = asyncio.Queue()
 
             def wrapper():
-                result = yield from asyncio.coroutine(func)(**kwargs)
-                if not iterable(result):
-                    result = [result]
+                if hasattr(func, "__call__"):
+                    result = yield from asyncio.coroutine(func)(**kwargs)
+                    if not iterable(result):
+                        result = [result]
+                elif iterable(func):
+                    result = func
+                else:
+                    raise TypeError
+
                 for i in result:
                     yield from queue.put(i)
                 yield from queue.put(EOL)  # we finished
@@ -92,4 +98,3 @@ class Job(object):
             tasks.append(self.loop.create_task(i()))
         self.loop.run_until_complete(self.until_finish())
         self.loop.close()
-
