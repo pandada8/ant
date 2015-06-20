@@ -5,7 +5,7 @@ import aiohttp
 class WrongCallError(Exception):
 
     def __repr__(self):
-        return "You should only use .init() once"
+        return "You should call .init() only once"
 
 
 class End_Of_Life():
@@ -62,9 +62,7 @@ class Job(object):
         @asyncio.coroutine
         def wrapper():
             while True:
-                print(prev_queue.empty())
                 to_do = yield from prev_queue.get()
-                print('recv', to_do)
                 if to_do is not EOL:
                     result = yield from func(to_do, **kwargs)
                     if not iterable(result):
@@ -95,20 +93,3 @@ class Job(object):
         self.loop.run_until_complete(self.until_finish())
         self.loop.close()
 
-
-def step1():
-    print('Step:1')
-    return list(range(10))
-
-
-def step2(x):
-    print('step:2')
-    return x * x
-
-
-def step3(x):
-    print("Step:3")
-    return [x, x]
-
-job = Job()
-job.init(step1).then(step2).then(step3).run()
