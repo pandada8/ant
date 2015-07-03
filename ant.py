@@ -28,24 +28,31 @@ def iterable(obj):
     except TypeError:
         return False
 
+jobs = None
 
 class Job(object):
 
-    def __init__(self, **kwargs, limit=0):
+    def __init__(self, limit=0):
+        global jobs
         self.funcs = []
         self.loop = asyncio.get_event_loop()
         self.prev_queue = None
         self.limit = limit
         self.tasks_done = deque()
-
+        jobs = self
+        print(self.loop.time())
     @asyncio.coroutine
     def wait_limit(self):
         if self.limit:
-            if len(self.requests_send) >= self.limit:
-                pased = datetime.now().timestamp() - self.tasks_done[0]
-                yield asyncio.sleep(60 - passed)
-                self.tasks_done.popleft()
-            self.tasks_done.append(datetime.now().timestamp())
+            if len(self.tasks_done) >= self.limit:
+                print(self.tasks_done)
+                passed = self.loop.time() - self.tasks_done.popleft()
+                print('wait for', passed)
+                yield from asyncio.sleep(60 - passed)
+                print(self.tasks_done)
+            else:
+                print('go')
+            self.tasks_done.append(self.loop.time())
 
     def init(self, func, **kwargs):
         if len(self.funcs) == 0:
@@ -53,7 +60,6 @@ class Job(object):
 
             def wrapper():
                 if hasattr(func, "__call__"):
-                    yield self.wait_limit()
                     result = yield from asyncio.coroutine(func)(**kwargs)
                     if not iterable(result):
                         result = [result]
@@ -85,12 +91,11 @@ class Job(object):
 
         def wrapper():
             while True:
-                yield self.wait_limit()
                 to_do = yield from prev_queue.get()
-                # print(func.__name__, 'got', to_do)
+                print(func.__name__, 'got', to_do)
                 if to_do is not EOL:
                     result = yield from func(to_do, **kwargs)
-                    # print(func.__name__, 'have', result)
+                    print(func.__name__, 'have', result)
                     if not iterable(result):
                         result = [result]
                     for i in result:
@@ -121,27 +126,43 @@ class Job(object):
 
 
 def fetch_and_parse(url, **kwargs):
+    global jobs
+    if jobs:
+        yield from jobs.wait_limit()
+    print(fetch_and_parse.__name__, 'got', url)
     kwargs['headers'] = headers
     if conn:
         kwargs['connector'] = conn
     response = yield from aiohttp.request("GET", url, **kwargs)
-    body = yield from response.read()
-    response.close()
-    asyncio.sleep(5)
+    body = yield from response.read_and_close()
     return pq(body)
 
 
 def fetch_and_save(url, filename, **kwargs):
+    global jobs
+    if jobs:
+        yield from jobs.wait_limit()
+    print(fetch_and_save.__name__, 'got', url)
     kwargs['headers'] = headers
     if conn:
         kwargs['connector'] = conn
+    if os.path.exists(filename):
+        return "File existed"
     response = yield from aiohttp.request('GET', url, **kwargs)
     with open(filename, "wb") as fp:
         while True:
-            chunk = yield from response.content.read(1024)
-            if len(chunk) == 0:
-                response.content.close()
-                break
+            chunk = yield from response.content.read(10240)
+            print(len(chunk))
+            if not chunk:
+                chunk = yield from response.content.read(10240)
+                print(len(chunk))
+                if not chunk:
+                    response.content.close()
+                    break
+                fp.write(chunk)
+                continue
             fp.write(chunk)
+            # yield from asyncio.sleep(0)
         # ok we finish download
+        print('OK')
     return
