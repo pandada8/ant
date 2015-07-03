@@ -2,6 +2,8 @@ import asyncio
 import aiohttp
 from pyquery import PyQuery as pq
 import os
+from datetime import datetime
+from collections import deque
 
 
 class WrongCallError(Exception):
@@ -29,10 +31,21 @@ def iterable(obj):
 
 class Job(object):
 
-    def __init__(self):
+    def __init__(self, **kwargs, limit=0):
         self.funcs = []
         self.loop = asyncio.get_event_loop()
         self.prev_queue = None
+        self.limit = limit
+        self.tasks_done = deque()
+
+    @asyncio.coroutine
+    def wait_limit(self):
+        if self.limit:
+            if len(self.requests_send) >= self.limit:
+                pased = datetime.now().timestamp() - self.tasks_done[0]
+                yield asyncio.sleep(60 - passed)
+                self.tasks_done.popleft()
+            self.tasks_done.append(datetime.now().timestamp())
 
     def init(self, func, **kwargs):
         if len(self.funcs) == 0:
@@ -40,6 +53,7 @@ class Job(object):
 
             def wrapper():
                 if hasattr(func, "__call__"):
+                    yield self.wait_limit()
                     result = yield from asyncio.coroutine(func)(**kwargs)
                     if not iterable(result):
                         result = [result]
@@ -69,9 +83,9 @@ class Job(object):
         queue = asyncio.Queue(maxsize=10)
         func = asyncio.coroutine(func)
 
-        @asyncio.coroutine
         def wrapper():
             while True:
+                yield self.wait_limit()
                 to_do = yield from prev_queue.get()
                 # print(func.__name__, 'got', to_do)
                 if to_do is not EOL:
@@ -111,9 +125,9 @@ def fetch_and_parse(url, **kwargs):
     if conn:
         kwargs['connector'] = conn
     response = yield from aiohttp.request("GET", url, **kwargs)
-    # print(response)
     body = yield from response.read()
-    # print(body[:100])
+    response.close()
+    asyncio.sleep(5)
     return pq(body)
 
 
@@ -126,6 +140,7 @@ def fetch_and_save(url, filename, **kwargs):
         while True:
             chunk = yield from response.content.read(1024)
             if len(chunk) == 0:
+                response.content.close()
                 break
             fp.write(chunk)
         # ok we finish download
